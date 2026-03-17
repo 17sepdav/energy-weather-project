@@ -1,0 +1,3 @@
+pip install pandas openpyxl numpy jupyter matplotlib
+pip install pyarrow
+pip install xlrd

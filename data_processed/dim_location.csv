@@ -1,0 +1,8 @@
+﻿canton;canton_name;station_abbr;station_name;station_canton;latitude;longitude;height_masl;height_barometer_masl;lv95_east;lv95_north;station_type;station_dataowner
+BE_JU;Bern/Jura;BER;Bern / Zollikofen;BE;46,990744;7,464061;553,0;554,0;2601934,0;1204410,0;Automatic weather stations - Measurement values;MeteoSchweiz
+GE_VD;Genf/Waadt;GVE;Genève / Cointrin;GE;46,247519;6,127742;411,0;412,0;2498904,0;1122632,0;Automatic weather stations - Measurement values;MeteoSchweiz
+GR;Graubünden;DAV;Davos;GR;46,812969;9,843558;1594,0;1596,0;2783519,0;1187459,0;Automatic weather stations - Measurement values;MeteoSchweiz, SLF
+SG;St. Gallen;STG;St. Gallen;SG;47,425475;9,398528;776,0;777,0;2747866,0;1254588,0;Automatic weather stations - Measurement values;MeteoSchweiz
+TI;Tessin;LUG;Lugano;TI;46,004217;8,960322;273,0;301,0;2717874,0;1095883,0;Automatic weather stations - Measurement values;MeteoSchweiz
+VS;Wallis;EVO;Evolène / Villa;VS;46,112211;7,508631;1825,0;1829,0;2605412,0;1106748,0;Automatic weather stations - Measurement values;MeteoSchweiz
+ZH_SH;Zürich/Schaffhausen;SMA;Zürich / Fluntern;ZH;47,377925;8,565742;556,0;557,0;2685118,0;1248066,0;Automatic weather stations - Measurement values;MeteoSchweiz
