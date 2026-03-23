@@ -24,6 +24,18 @@ Dabei werden zentrale zeitbasierte Features generiert (z. B. Stunde, Wochentag, 
 Erweitert die Analytical Base um zusätzliche Analyse- und Modellierungsfeatures (z. B. temperaturbasierte Kennzahlen wie HDD/CDD, Wetter-Flags sowie zeitliche Lag-Features des Stromverbrauchs).  
 Das Ergebnis ist ein Feature-Datensatz, der als zentrale Faktentabelle für Analytics und Power BI dient.
 
+### `src/analyse_correlations.py`
+Berechnet Korrelationen zwischen Stromverbrauch und allen relevanten Features über verschiedene Analyse-Sichten (z. B. gesamt, je Kanton, je Saison oder nach Zeitmerkmalen).
+Relevantes Output-File für PowerBI ist "correlations_target_long.csv"
+
+### `src/regression_analysis.py`
+Führt eine lineare Regressionsanalyse auf Basis des Feature-Datensatzes durch, um den Einfluss von Wetter-, Zeit- und Strukturmerkmalen auf den Stromverbrauch zu quantifizieren.
+Es werden drei Modellvarianten berechnet (mit Lag-Features, ohne Lag sowie ohne Lag inkl. Region), um unterschiedliche Einflussfaktoren vergleichbar zu machen.
+Der Output umfasst:
+-Modellgütemetriken (z. B. R², MAE, RMSE)
+-Regressionskoeffizienten zur Interpretation der Feature-Effekte
+-Beispielhafte Predictions zur Bewertung der Modellqualität
+
 ## Ordnerstruktur
 
 ### `data_raw/`
