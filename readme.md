@@ -36,6 +36,15 @@ Der Output umfasst:
 -Regressionskoeffizienten zur Interpretation der Feature-Effekte
 -Beispielhafte Predictions zur Bewertung der Modellqualität
 
+### `src/build_scenario_predictions.py`
+Erstellt ein vereinfachtes, erklärbares Prognosemodell auf Basis ausgewählter, fachlich interpretierbarer Features (Kanton, Saison, Tagtyp, Stunde und Temperaturklasse).
+Das Skript bereitet die Daten entsprechend auf, trainiert ein lineares Regressionsmodell und evaluiert dessen Güte.
+Auf Basis des Modells werden anschliessend alle sinnvollen Szenario-Kombinationen generiert und für jede Kombination der erwartete Stromverbrauch prognostiziert.
+Der zentrale Output ist:
+scenario_predictions.csv
+→ enthält für jede Kombination von Kanton, Saison, Tagtyp, Stunde und Temperaturklasse den geschätzten Stromverbrauch
+→ dient als Grundlage für interaktive Szenario-Analysen und Visualisierungen in Power BI (z. B. Slicer-basierte Prognosen des Tagesverlaufs)
+
 ## Ordnerstruktur
 
 ### `data_raw/`
