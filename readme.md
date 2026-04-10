@@ -25,25 +25,56 @@ Erweitert die Analytical Base um zusätzliche Analyse- und Modellierungsfeatures
 Das Ergebnis ist ein Feature-Datensatz, der als zentrale Faktentabelle für Analytics und Power BI dient.
 
 ### `src/analyse_correlations.py`
-Berechnet Korrelationen zwischen Stromverbrauch und allen relevanten Features über verschiedene Analyse-Sichten (z. B. gesamt, je Kanton, je Saison oder nach Zeitmerkmalen).
-Relevantes Output-File für PowerBI ist "correlations_target_long.csv"
+Berechnet Korrelationen zwischen Stromverbrauch und allen relevanten Features über verschiedene Analyse-Sichten (z. B. gesamt, je Kanton, je Saison oder nach Zeitmerkmalen).  
+Relevantes Output-File für Power BI: `correlations_target_long.csv`
 
-### `src/regression_analysis.py`
-Führt eine lineare Regressionsanalyse auf Basis des Feature-Datensatzes durch, um den Einfluss von Wetter-, Zeit- und Strukturmerkmalen auf den Stromverbrauch zu quantifizieren.
+### `src/analyse_regression.py`
+Führt eine lineare Regressionsanalyse auf Basis des Feature-Datensatzes durch, um den Einfluss von Wetter-, Zeit- und Strukturmerkmalen auf den Stromverbrauch zu quantifizieren.  
 Es werden drei Modellvarianten berechnet (mit Lag-Features, ohne Lag sowie ohne Lag inkl. Region), um unterschiedliche Einflussfaktoren vergleichbar zu machen.
-Der Output umfasst:
--Modellgütemetriken (z. B. R², MAE, RMSE)
--Regressionskoeffizienten zur Interpretation der Feature-Effekte
--Beispielhafte Predictions zur Bewertung der Modellqualität
+
+Output-Files:
+- `regression_model_metrics.csv` – Modellgütemetriken (R², MAE, RMSE)
+- `regression_coefficients.csv` – Regressionskoeffizienten zur Interpretation der Feature-Effekte
+- `regression_predictions_sample.csv` – Beispielhafte Predictions zur Bewertung der Modellqualität
+
+### `src/analyse_regression_extended.py`
+Erweitert `analyse_regression.py` um zwei Random-Forest-Modelle (Modell D und E) und ergänzt die bestehenden Output-Files um die neuen Ergebnisse. Muss **nach** `analyse_regression.py` ausgeführt werden.
+
+Es werden folgende Modelle trainiert:
+
+| Modell | Algorithmus | Features | Vergleich zu |
+|--------|-------------|----------|--------------|
+| D | Random Forest | Wetter + Zeit + Kanton | Modell C (LinReg) |
+| E | Random Forest | Wetter + Zeit + Lag | Modell A (LinReg) |
+
+Output-Files:
+- `regression_model_metrics.csv` – aktualisiert (Modelle D + E ergänzt, Spalten `algorithm` und `model_label` hinzugefügt)
+- `regression_coefficients.csv` – aktualisiert (RF Feature Importances für D + E angehängt)
+- `regression_residuals.csv` – neu erstellt (Residualanalyse von Modell E für Power BI)
 
 ### `src/build_scenario_predictions.py`
-Erstellt ein vereinfachtes, erklärbares Prognosemodell auf Basis ausgewählter, fachlich interpretierbarer Features (Kanton, Saison, Tagtyp, Stunde und Temperaturklasse).
-Das Skript bereitet die Daten entsprechend auf, trainiert ein lineares Regressionsmodell und evaluiert dessen Güte.
+Erstellt ein vereinfachtes, erklärbares Prognosemodell auf Basis ausgewählter, fachlich interpretierbarer Features (Kanton, Saison, Tagtyp, Stunde und Temperaturklasse).  
+Das Skript bereitet die Daten entsprechend auf, trainiert ein lineares Regressionsmodell und evaluiert dessen Güte.  
 Auf Basis des Modells werden anschliessend alle sinnvollen Szenario-Kombinationen generiert und für jede Kombination der erwartete Stromverbrauch prognostiziert.
-Der zentrale Output ist:
-scenario_predictions.csv
-→ enthält für jede Kombination von Kanton, Saison, Tagtyp, Stunde und Temperaturklasse den geschätzten Stromverbrauch
-→ dient als Grundlage für interaktive Szenario-Analysen und Visualisierungen in Power BI (z. B. Slicer-basierte Prognosen des Tagesverlaufs)
+
+Output-File: `scenario_predictions.csv`
+- Enthält für jede Kombination von Kanton, Saison, Tagtyp, Stunde und Temperaturklasse den geschätzten Stromverbrauch
+- Dient als Grundlage für interaktive Szenario-Analysen und Visualisierungen in Power BI (z. B. Slicer-basierte Prognosen des Tagesverlaufs)
+
+## Ausführungsreihenfolge
+
+```
+build_electricity_dataset.py
+build_weather_dataset.py
+build_dim_location.py
+build_analytical_base.py
+build_dim_time.py
+build_feature_dataset.py
+analyse_correlations.py
+analyse_regression.py
+analyse_regression_extended.py   ← muss nach analyse_regression.py laufen
+build_scenario_predictions.py
+```
 
 ## Ordnerstruktur
 

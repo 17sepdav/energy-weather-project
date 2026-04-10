@@ -1,27 +1,47 @@
-feature;coefficient;model;feature_type
-day_of_week;-4,058623270432679;A_with_lag;time
-cdd;1,0766359285080214;A_with_lag;weather
-hdd;0,9420685208242215;A_with_lag;weather
-month;0,6798520063383465;A_with_lag;time
-consumption_lag_168h;0,5094048745878939;A_with_lag;lag
-consumption_lag_24h;0,47726784998419647;A_with_lag;lag
-temperature_2m;0,13456740768370615;A_with_lag;weather
-hour;0,06988292338906618;A_with_lag;time
-day_of_week;-8,720456297843759;B_weather_time;time
-cdd;4,631860626446299;B_weather_time;weather
-month;-2,847905336239324;B_weather_time;time
-hdd;2,5844386655874443;B_weather_time;weather
-hour;2,5203130317658307;B_weather_time;time
-temperature_2m;2,04742196085846;B_weather_time;weather
-canton_GR;-680,8308941260559;C_weather_time_canton;region
-canton_TI;-563,4002080735302;C_weather_time_canton;region
-canton_SG;-514,7448035602097;C_weather_time_canton;region
-canton_VS;-492,7042593981023;C_weather_time_canton;region
-canton_ZH_SH;142,41449276065762;C_weather_time_canton;region
-canton_GE_VD;-39,573687622631105;C_weather_time_canton;region
-day_of_week;-8,397153322516532;C_weather_time_canton;time
-hdd;6,4685731831549855;C_weather_time_canton;weather
-cdd;5,764637108294473;C_weather_time_canton;weather
-hour;3,2880042629463584;C_weather_time_canton;time
-temperature_2m;-0,7039360748580914;C_weather_time_canton;weather
-month;-0,3814984124696875;C_weather_time_canton;time
+feature;coefficient;model;feature_type;algorithm;importance;rank
+day_of_week;-4,058623270432679;A_with_lag;time;Linear Regression;;
+cdd;1,0766359285080214;A_with_lag;weather;Linear Regression;;
+hdd;0,9420685208242215;A_with_lag;weather;Linear Regression;;
+month;0,6798520063383465;A_with_lag;time;Linear Regression;;
+consumption_lag_168h;0,5094048745878939;A_with_lag;lag;Linear Regression;;
+consumption_lag_24h;0,4772678499841964;A_with_lag;lag;Linear Regression;;
+temperature_2m;0,1345674076837061;A_with_lag;weather;Linear Regression;;
+hour;0,0698829233890661;A_with_lag;time;Linear Regression;;
+day_of_week;-8,720456297843759;B_weather_time;time;Linear Regression;;
+cdd;4,631860626446299;B_weather_time;weather;Linear Regression;;
+month;-2,847905336239324;B_weather_time;time;Linear Regression;;
+hdd;2,5844386655874443;B_weather_time;weather;Linear Regression;;
+hour;2,5203130317658307;B_weather_time;time;Linear Regression;;
+temperature_2m;2,04742196085846;B_weather_time;weather;Linear Regression;;
+canton_GR;-680,8308941260559;C_weather_time_canton;region;Linear Regression;;
+canton_TI;-563,4002080735302;C_weather_time_canton;region;Linear Regression;;
+canton_SG;-514,7448035602097;C_weather_time_canton;region;Linear Regression;;
+canton_VS;-492,7042593981023;C_weather_time_canton;region;Linear Regression;;
+canton_ZH_SH;142,41449276065762;C_weather_time_canton;region;Linear Regression;;
+canton_GE_VD;-39,57368762263111;C_weather_time_canton;region;Linear Regression;;
+day_of_week;-8,397153322516532;C_weather_time_canton;time;Linear Regression;;
+hdd;6,4685731831549855;C_weather_time_canton;weather;Linear Regression;;
+cdd;5,764637108294473;C_weather_time_canton;weather;Linear Regression;;
+hour;3,2880042629463584;C_weather_time_canton;time;Linear Regression;;
+temperature_2m;-0,7039360748580914;C_weather_time_canton;weather;Linear Regression;;
+month;-0,3814984124696875;C_weather_time_canton;time;Linear Regression;;
+canton_ZH_SH;;D_rf_weather_canton;region;Random Forest;0,3250623832839633;1,0
+canton_GE_VD;;D_rf_weather_canton;region;Random Forest;0,1861834914319697;2,0
+canton_VS;;D_rf_weather_canton;region;Random Forest;0,15641044457509462;3,0
+canton_GR;;D_rf_weather_canton;region;Random Forest;0,07698717109227529;4,0
+canton_SG;;D_rf_weather_canton;region;Random Forest;0,0749614441960725;5,0
+canton_TI;;D_rf_weather_canton;region;Random Forest;0,06891911827239076;6,0
+hour;;D_rf_weather_canton;time;Random Forest;0,05020160887027284;7,0
+hdd;;D_rf_weather_canton;weather;Random Forest;0,023943534872156436;8,0
+day_of_week;;D_rf_weather_canton;time;Random Forest;0,015837222250881085;9,0
+temperature_2m;;D_rf_weather_canton;weather;Random Forest;0,015561218759086042;10,0
+month;;D_rf_weather_canton;time;Random Forest;0,005756556645711061;11,0
+cdd;;D_rf_weather_canton;weather;Random Forest;0,00017580575012654122;12,0
+consumption_lag_24h;;E_rf_with_lag;lag;Random Forest;0,7159589949874423;1,0
+consumption_lag_168h;;E_rf_with_lag;lag;Random Forest;0,27341393918559015;2,0
+day_of_week;;E_rf_with_lag;time;Random Forest;0,004746077779834977;3,0
+hour;;E_rf_with_lag;time;Random Forest;0,0022712320295340755;4,0
+temperature_2m;;E_rf_with_lag;weather;Random Forest;0,0013425076599597166;5,0
+hdd;;E_rf_with_lag;weather;Random Forest;0,0012439606178600488;6,0
+month;;E_rf_with_lag;time;Random Forest;0,0009391618365545061;7,0
+cdd;;E_rf_with_lag;weather;Random Forest;8,412590322439033e-05;8,0
