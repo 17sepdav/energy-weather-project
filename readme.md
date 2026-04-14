@@ -52,14 +52,23 @@ Output-Files:
 - `regression_coefficients.csv` – aktualisiert (RF Feature Importances für D + E angehängt)
 - `regression_residuals.csv` – neu erstellt (Residualanalyse von Modell E für Power BI)
 
-### `src/build_scenario_predictions.py`
-Erstellt ein vereinfachtes, erklärbares Prognosemodell auf Basis ausgewählter, fachlich interpretierbarer Features (Kanton, Saison, Tagtyp, Stunde und Temperaturklasse).  
-Das Skript bereitet die Daten entsprechend auf, trainiert ein lineares Regressionsmodell und evaluiert dessen Güte.  
+### `src/build_scenario_predictions_LR.py`
+Erstellt ein vereinfachtes, erklärbares Prognosemodell auf Basis ausgewählter, fachlich interpretierbarer Features (Kanton, Saison, Tagtyp, Stunde und Temperaturklasse) mittels **linearer Regression**.  
+Das Skript bereitet die Daten entsprechend auf, trainiert das Modell und evaluiert dessen Güte.  
 Auf Basis des Modells werden anschliessend alle sinnvollen Szenario-Kombinationen generiert und für jede Kombination der erwartete Stromverbrauch prognostiziert.
 
 Output-File: `scenario_predictions.csv`
 - Enthält für jede Kombination von Kanton, Saison, Tagtyp, Stunde und Temperaturklasse den geschätzten Stromverbrauch
-- Dient als Grundlage für interaktive Szenario-Analysen und Visualisierungen in Power BI (z. B. Slicer-basierte Prognosen des Tagesverlaufs)
+- **Wird in Power BI verwendet** für die interaktive Szenario-Analyse: Der User wählt via Slicer eine Kombination aus Einflussfaktoren und erhält unmittelbar eine modellbasierte Schätzung des Tagesverbrauchsprofils. Das lineare Modell wurde bewusst gewählt, da es stündliche Verbrauchsprofile realistisch und interpretierbar abbildet — im Gegensatz zum Random Forest, der unter fixen Szenariobedingungen zu stark mittelt und dadurch flache, wenig aussagekräftige Tagesverläufe erzeugt.
+
+### `src/build_scenario_predictions_RF.py`
+Variante von `build_scenario_predictions_LR.py` mit einem **Random Forest** als Prognosemodell (analog zu Modell D aus `analyse_regression_extended.py`: RF mit Kanton, ohne Lag-Features).  
+Das Modell erzielt global eine höhere Prognosegenauigkeit (R² ≈ 0.93 vs. 0.85), eignet sich jedoch weniger für die Visualisierung typischer Tagesverläufe unter fixen Szenariobedingungen, da die stündliche Variation im RF-Output stark geglättet wird.  
+Das Skript dient als Vergleichsgrundlage und Archivzweck.
+
+Output-File: `scenario_predictions_rf.csv`
+- Gleiche Struktur wie `scenario_predictions.csv`
+- **Nicht in Power BI eingebunden** (siehe Begründung oben)
 
 ## Ausführungsreihenfolge
 
@@ -73,7 +82,8 @@ build_feature_dataset.py
 analyse_correlations.py
 analyse_regression.py
 analyse_regression_extended.py   ← muss nach analyse_regression.py laufen
-build_scenario_predictions.py
+build_scenario_predictions_LR.py
+build_scenario_predictions_RF.py ← optional, nur für Modellvergleich
 ```
 
 ## Ordnerstruktur
