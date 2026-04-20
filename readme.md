@@ -28,7 +28,7 @@ energy-weather-project/
 │   ├── electricity/             #   Swissgrid Excel files
 │   └── weather/                 #   MeteoSwiss CSV files per canton
 ├── data_processed/              # Cleaned, joined, and analytical outputs (CSV)
-├── docs/                        # Technical documentation of the pipeline
+├── documentation/                        # Technical documentation of the pipeline
 │   └── data_processing.md
 ├── powerbi/                     # Power BI dashboard (.pbix) and assets
 ├── archive/                     # Legacy files, scratch scripts, older README
@@ -122,7 +122,7 @@ python build_scenario_predictions_RF.py   # optional
 | 10 | `build_scenario_predictions_LR.py` | `scenario_predictions.csv` |
 | 11 | `build_scenario_predictions_RF.py` | `scenario_predictions_rf.csv` (optional — for model comparison only) |
 
-See [`docs/data_processing.md`](docs/data_processing.md) for per-script detail.
+See [`docs/data_processing.md`](documentation/data_processing.md) for per-script detail.
 
 ## Models
 
