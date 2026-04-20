@@ -12,7 +12,7 @@ To answer this, the project combines two public data sources at an hourly resolu
 
 | Source | Provider | Content | Granularity |
 |---|---|---|---|
-| Electricity consumption | [Swissgrid — Energy Statistics](https://www.swissgrid.ch/en/home/operation/grid-data/generation.html) | Hourly electricity consumption per canton group | Hourly, 7 canton groups |
+| Electricity consumption | [Swissgrid — Energy Statistics](https://www.swissgrid.ch/en/home/operation/grid-data/generation.html) | Quarter-Hourly electricity consumption per canton group | Quarter-Hourly, 7 canton groups |
 | Weather | [MeteoSwiss — IDAweb / Open Data](https://www.meteoswiss.admin.ch/services-and-publications/service/weather-and-climate-products/data-portal-for-teaching-and-research.html) | Temperature, precipitation, humidity, radiation, wind, pressure, etc. | Hourly, one representative station per canton group |
 
 Seven canton groups are used (matching Swissgrid's reporting grid): **BE_JU, GE_VD, GR, SG, TI, VS, ZH_SH**.
@@ -28,11 +28,12 @@ energy-weather-project/
 │   ├── electricity/             #   Swissgrid Excel files
 │   └── weather/                 #   MeteoSwiss CSV files per canton
 ├── data_processed/              # Cleaned, joined, and analytical outputs (CSV)
-├── documentation/                        # Technical documentation of the pipeline
-│   └── data_processing.md
+├── documentation/                        
+│   └── dashboard.md             # Screenshots of the Dashboard
+│   └── data_processing.md       # Technical documentation of the pipeline
 ├── powerbi/                     # Power BI dashboard (.pbix) and assets
 ├── archive/                     # Legacy files, scratch scripts, older README
-├── libraries.txt                # Required Python packages
+├── requirements.txt             # Required Python packages
 └── readme.md                    # This file
 ```
 
