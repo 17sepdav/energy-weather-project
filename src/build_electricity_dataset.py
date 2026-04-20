@@ -1,185 +1,133 @@
+"""
+build_electricity_dataset.py
+============================
+Builds the hourly electricity consumption dataset from the raw Swissgrid
+Excel files ("EnergieUebersichtCH-YYYY.xls[x]").
+
+Pipeline
+--------
+1. Load each yearly Swissgrid file from ../data_raw/electricity/
+2. Keep only the regional consumption columns we need for the project
+3. Parse timestamps and restrict each file to rows belonging to its own year
+   (Swissgrid files overlap at year boundaries, so we trim to avoid duplicates)
+4. Reshape wide -> long (one row per timestamp x canton)
+5. Aggregate 15-minute values to hourly sums (values are energy, so sum is correct)
+6. Convert kWh -> MWh for better readability downstream
+7. Concatenate all years and export as a single CSV
+
+Output: ../data_processed/electricity_hourly_2015_2026.csv
+"""
+
 import re
 import pandas as pd
 from pathlib import Path
 
-# ------------------------------------------------------------
-# 1) Grundeinstellungen
-# ------------------------------------------------------------
+# --- Configuration -----------------------------------------------------------
 
-# Ordner mit den Rohdateien der Stromdaten
-electricity_folder = Path("../data_raw/electricity")
+ELECTRICITY_FOLDER = Path("../data_raw/electricity")
+OUTPUT_FOLDER      = Path("../data_processed")
+OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
-# Zielordner für die aufbereiteten Daten
-output_folder = Path("../data_processed")
-output_folder.mkdir(parents=True, exist_ok=True)
+OUTPUT_FILE = OUTPUT_FOLDER / "electricity_hourly_2015_2026.csv"
 
-# Relevante Spalten aus den Swissgrid-Dateien:
-# Links steht jeweils der Originalname in der Excel-Datei,
-# rechts der kompakte Zielname für die weitere Verarbeitung.
-selected_columns = {
+# Mapping of original Swissgrid column names -> compact canton codes used downstream.
+# Only these columns are kept from each Excel file; everything else is dropped.
+SELECTED_COLUMNS = {
     "Unnamed: 0": "timestamp",
-    "Verbrauch Kanton GR\nConsumption Canton GR": "GR",
-    "Verbrauch Kanton SG\nConsumption Canton SG": "SG",
-    "Verbrauch Kanton TI\nConsumption Canton TI": "TI",
-    "Verbrauch Kanton VS\nConsumption Canton VS": "VS",
+    "Verbrauch Kanton GR\nConsumption Canton GR":           "GR",
+    "Verbrauch Kanton SG\nConsumption Canton SG":           "SG",
+    "Verbrauch Kanton TI\nConsumption Canton TI":           "TI",
+    "Verbrauch Kanton VS\nConsumption Canton VS":           "VS",
     "Verbrauch Kantone GE, VD\nConsumption Cantons GE, VD": "GE_VD",
     "Verbrauch Kantone SH, ZH\nConsumption Cantons SH, ZH": "ZH_SH",
     "Verbrauch Kantone BE, JU\nConsumption Cantons BE, JU": "BE_JU",
 }
 
-# ------------------------------------------------------------
-# 2) Alle relevanten Excel-Dateien finden
-# ------------------------------------------------------------
-
-all_files = sorted(list(electricity_folder.glob("*.xls")) + list(electricity_folder.glob("*.xlsx")))
-
-print("Gefundene Stromdateien:")
-for file in all_files:
-    print(f" - {file.name}")
-
-if not all_files:
-    raise FileNotFoundError("Keine Stromdateien im Ordner '../data_raw/electricity' gefunden.")
-
-
-# ------------------------------------------------------------
-# 3) Funktion zur Verarbeitung einer einzelnen Datei
-# ------------------------------------------------------------
+# --- Processing --------------------------------------------------------------
 
 def process_electricity_file(file_path: Path) -> pd.DataFrame:
     """
-    Liest eine einzelne Swissgrid-Datei ein und transformiert sie in
-    ein stündliches, langes Format.
-
-    Ergebnisstruktur:
-    timestamp | canton_code | consumption_mwh
+    Read a single Swissgrid yearly file and return hourly consumption in long
+    format with columns: timestamp, canton_code, consumption_mwh.
     """
-
-    # Jahr aus dem Dateinamen extrahieren, z. B. 2024 aus:
-    # 'EnergieUebersichtCH-2024.xlsx'
+    # Extract the year from the filename (e.g. "EnergieUebersichtCH-2024.xlsx" -> 2024).
+    # Used below to drop rows that spill into neighbouring years.
     match = re.search(r"(\d{4})", file_path.stem)
     if not match:
-        raise ValueError(f"Kein Jahr im Dateinamen gefunden: {file_path.name}")
-
+        raise ValueError(f"No year found in filename: {file_path.name}")
     file_year = int(match.group(1))
 
-    # Excel-Datei einlesen:
-    # - Sheet 'Zeitreihen0h15' enthält die Viertelstunden-Zeitreihe
-    # - header=0 verwendet die erste Zeile als Spaltennamen
-    # - skiprows=[1] überspringt die Zeile mit den Einheiten (kWh)
+    # Sheet 'Zeitreihen0h15' holds the 15-minute timeseries.
+    # skiprows=[1] skips the units row (kWh) that sits between header and data.
     df = pd.read_excel(
         file_path,
         sheet_name="Zeitreihen0h15",
         header=0,
-        skiprows=[1]
+        skiprows=[1],
     )
 
-    # Nur die für das Projekt relevanten Spalten behalten
-    df = df[list(selected_columns.keys())].rename(columns=selected_columns)
-
-    # Zeitstempel in echtes Datumsformat umwandeln
+    # Keep and rename only the regional columns of interest.
+    df = df[list(SELECTED_COLUMNS.keys())].rename(columns=SELECTED_COLUMNS)
     df["timestamp"] = pd.to_datetime(df["timestamp"], format="%d.%m.%Y %H:%M")
 
-    # Nur Daten behalten, die wirklich zum Jahr der Datei gehören.
-    # Damit werden Überlappungen zwischen Jahresdateien vermieden.
+    # Drop rows that belong to a different year than the file (avoids overlap duplicates).
     df = df[df["timestamp"].dt.year == file_year].copy()
 
-    # Von breitem Format in langes Format umwandeln:
-    # vorher: eine Spalte pro Region
-    # nachher: eine Zeile pro Zeitstempel und Region
+    # Wide -> long: one row per (timestamp, canton_code).
     df_long = df.melt(
         id_vars="timestamp",
         var_name="canton_code",
-        value_name="consumption_kwh"
+        value_name="consumption_kwh",
     )
 
-    # Viertelstundenwerte auf volle Stunden runden
-    # Beispiel: 00:15, 00:30, 00:45 -> 00:00
+    # Floor timestamps to full hours so 00:15 / 00:30 / 00:45 all map to the 00:00 bucket.
     df_long["timestamp"] = df_long["timestamp"].dt.floor("h")
 
-    # Viertelstundenwerte je Stunde und Region aufsummieren
-    # Summe ist korrekt, da es sich um Energiemengen handelt
+    # Aggregate the four quarter-hour values per hour. Sum is correct for energy quantities.
     df_hourly = (
         df_long
         .groupby(["timestamp", "canton_code"], as_index=False)
         .agg(consumption_kwh=("consumption_kwh", "sum"))
     )
 
-    # kWh in MWh umrechnen, damit die Werte später besser lesbar sind
+    # Convert to MWh for downstream readability.
     df_hourly["consumption_mwh"] = df_hourly["consumption_kwh"] / 1000
-
-    # kWh-Spalte wird danach nicht mehr benötigt
     df_hourly = df_hourly.drop(columns=["consumption_kwh"])
 
     return df_hourly
 
 
-# ------------------------------------------------------------
-# 4) Alle Dateien verarbeiten und zusammenführen
-# ------------------------------------------------------------
+# --- Build -------------------------------------------------------------------
 
-all_data = []
+all_files = sorted(
+    list(ELECTRICITY_FOLDER.glob("*.xls")) + list(ELECTRICITY_FOLDER.glob("*.xlsx"))
+)
+if not all_files:
+    raise FileNotFoundError(f"No Swissgrid files found in {ELECTRICITY_FOLDER}")
 
-for file_path in all_files:
-    print(f"\nVerarbeite Datei: {file_path.name}")
-    df_processed = process_electricity_file(file_path)
-    all_data.append(df_processed)
+print(f"Processing {len(all_files)} Swissgrid files ...")
 
+all_data = [process_electricity_file(f) for f in all_files]
 electricity_final = pd.concat(all_data, ignore_index=True)
 
-
-# ------------------------------------------------------------
-# 5) Finale Aufbereitung
-# ------------------------------------------------------------
-
-# Zur Sicherheit chronologisch sortieren
-electricity_final = electricity_final.sort_values(
-    by=["timestamp", "canton_code"]
-).reset_index(drop=True)
-
-# Finale Spaltenreihenfolge
+# Final ordering and column layout.
+electricity_final = (
+    electricity_final
+    .sort_values(by=["timestamp", "canton_code"])
+    .reset_index(drop=True)
+)
 electricity_final = electricity_final[["timestamp", "canton_code", "consumption_mwh"]]
-
-
-# ------------------------------------------------------------
-# 6) Qualitätschecks / Übersicht
-# ------------------------------------------------------------
-
-# Prüfen, ob nach dem Jahr-Filter noch Duplikate vorhanden sind.
-# Die Kombination aus timestamp + canton_code sollte eindeutig sein.
-duplicate_count = electricity_final.duplicated(
-    subset=["timestamp", "canton_code"]
-).sum()
-
-print("\n--- Finale Übersicht Stromdaten ---")
-print(f"Anzahl Zeilen: {len(electricity_final)}")
-print(f"Anzahl Spalten: {electricity_final.shape[1]}")
-
-print("\nZeitraum:")
-print(f"Von: {electricity_final['timestamp'].min()}")
-print(f"Bis: {electricity_final['timestamp'].max()}")
-
-print("\nAnzahl Datensätze pro Region:")
-print(electricity_final["canton_code"].value_counts().sort_index())
-
-print(f"\nVerbleibende Duplikate (timestamp + canton_code): {duplicate_count}")
-
-print("\nErste 10 Zeilen:")
-print(electricity_final.head(10))
-
-
-# ------------------------------------------------------------
-# 7) Export
-# ------------------------------------------------------------
-
-output_path = output_folder / "electricity_hourly_2015_2026.csv"
 electricity_final["consumption_mwh"] = electricity_final["consumption_mwh"].round(3)
 
-output_path = output_folder / "electricity_hourly_2015_2026.csv"
-electricity_final.to_csv(
-    output_path,
-    index=False,
-    sep=";",
-    decimal=","
-)
+# --- Quality check -----------------------------------------------------------
+# (timestamp, canton_code) must be unique after the year-filter logic above.
+duplicate_count = electricity_final.duplicated(subset=["timestamp", "canton_code"]).sum()
 
-print(f"\nDatei erfolgreich gespeichert: {output_path}")
+# --- Summary & export --------------------------------------------------------
+
+print(f"Rows: {len(electricity_final):,}")
+print(f"Time range: {electricity_final['timestamp'].min()} -> {electricity_final['timestamp'].max()}")
+print(f"Duplicates on (timestamp, canton_code): {duplicate_count}")
+
+electricity_final.to_csv(OUTPUT_FILE, index=False, sep=";", decimal=",")
+print(f"Saved: {OUTPUT_FILE}")

@@ -1,320 +1,216 @@
+"""
+build_scenario_predictions_RF.py
+================================
+Builds a scenario prediction table for interactive use in Power BI, based on
+a Random Forest model.
+
+This is the Random Forest counterpart of build_scenario_predictions_LR.py.
+The two scripts share the same feature set, the same scenario grid and the
+same output schema — only the estimator differs. The RF variant captures
+non-linear interactions between hour, season and temperature that a linear
+model cannot, which typically yields a noticeably higher R².
+
+The chosen hyperparameters mirror Model D from analyse_regression_extended.py
+(RF + Canton, no lag features) so the scenario predictions are methodologically
+consistent with the wider regression analysis.
+
+Output: ../data_processed/scenario_predictions_rf.csv
+"""
+
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.impute import SimpleImputer
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+from sklearn.compose         import ColumnTransformer
+from sklearn.pipeline        import Pipeline
+from sklearn.preprocessing   import OneHotEncoder
+from sklearn.impute          import SimpleImputer
+from sklearn.ensemble        import RandomForestRegressor
+from sklearn.metrics         import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 
-# ------------------------------------------------------------
-# 1) Pfade und Grundeinstellungen
-# ------------------------------------------------------------
+# --- Configuration -----------------------------------------------------------
 
-input_file  = Path("../data_processed/feature_dataset.csv")
-output_file = Path("../data_processed/scenario_predictions_rf.csv")
+INPUT_FILE  = Path("../data_processed/feature_dataset.csv")
+OUTPUT_FILE = Path("../data_processed/scenario_predictions_rf.csv")
 
-target_candidates = [
+TARGET_CANDIDATES = [
+    "consumption_mwh", "electricity_consumption_mwh",
+    "stromverbrauch_mwh", "consumption",
+]
+
+NUMERIC_COLUMNS = [
     "consumption_mwh",
-    "electricity_consumption_mwh",
-    "stromverbrauch_mwh",
-    "consumption"
+    "temperature_2m", "precipitation", "humidity_rel",
+    "global_radiation", "sunshine_duration",
+    "wind_speed", "wind_direction",
+    "pressure_station", "pressure_qnh",
+    "vapour_pressure", "dew_point",
+    "hdd", "cdd",
+    "is_extreme_cold", "is_extreme_heat",
+    "precipitation_flag", "heavy_precipitation_flag",
+    "consumption_lag_24h", "consumption_lag_168h",
 ]
 
-numeric_columns = [
-    "consumption_mwh",
-    "temperature_2m",
-    "precipitation",
-    "humidity_rel",
-    "global_radiation",
-    "sunshine_duration",
-    "wind_speed",
-    "wind_direction",
-    "pressure_station",
-    "pressure_qnh",
-    "vapour_pressure",
-    "dew_point",
-    "hdd",
-    "cdd",
-    "is_extreme_cold",
-    "is_extreme_heat",
-    "precipitation_flag",
-    "heavy_precipitation_flag",
-    "consumption_lag_24h",
-    "consumption_lag_168h"
-]
-
-# Scenario features: no lag variables (not interactively controllable in Power BI)
-# This mirrors the logic of Model D (RF + Canton) from analyse_regression_extended.py
-scenario_features = [
-    "canton",
-    "season",
-    "day_type",
-    "hour",
-    "temperature_bucket"
+# Only features the user can choose via Power BI slicers — no lag features.
+SCENARIO_FEATURES = [
+    "canton", "season", "day_type", "hour", "temperature_bucket",
 ]
 
 
-# ------------------------------------------------------------
-# 2) Hilfsfunktionen
-# ------------------------------------------------------------
-
-def print_section(title: str) -> None:
-    print("\n" + "=" * 70)
-    print(title)
-    print("=" * 70)
-
+# --- Helpers -----------------------------------------------------------------
 
 def find_target_column(df: pd.DataFrame, candidates: list[str]) -> str:
+    """Return the first candidate that actually exists as a column."""
     for col in candidates:
         if col in df.columns:
             return col
-    raise ValueError(
-        "Keine Zielvariable gefunden.\n"
-        f"Vorhandene Spalten: {list(df.columns)}"
-    )
+    raise ValueError(f"No target column found. Available columns: {list(df.columns)}")
 
 
 def read_csv_robust(file_path: Path) -> pd.DataFrame:
+    """Try common separators until one parses successfully."""
     last_error = None
-
     for sep in [";", ","]:
         try:
-            df = pd.read_csv(
-                file_path,
-                sep=sep,
-                encoding="utf-8-sig",
-                engine="python"
-            )
-            print(f"CSV erfolgreich gelesen mit Separator: '{sep}'")
-            return df
+            return pd.read_csv(file_path, sep=sep, encoding="utf-8-sig", engine="python")
         except Exception as e:
             last_error = e
-
-    raise ValueError(f"CSV konnte nicht eingelesen werden:\n{last_error}")
+    raise ValueError(f"CSV could not be read:\n{last_error}")
 
 
 def convert_decimal_columns(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    """Replace comma decimals with dots and coerce the given columns to numeric."""
     df = df.copy()
-
     for col in columns:
         if col in df.columns:
             df[col] = (
-                df[col]
-                .astype("string")
-                .str.replace(",", ".", regex=False)
-                .str.strip()
+                df[col].astype("string")
+                       .str.replace(",", ".", regex=False)
+                       .str.strip()
             )
             df[col] = pd.to_numeric(df[col], errors="coerce")
-
     return df
 
 
 def add_time_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Derive hour / month / day_type / season from the timestamp."""
     df = df.copy()
-
-    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-    df["hour"]      = df["timestamp"].dt.hour.astype("Int64")
-    df["month"]     = df["timestamp"].dt.month
-
+    df["timestamp"]   = pd.to_datetime(df["timestamp"], errors="coerce")
+    df["hour"]        = df["timestamp"].dt.hour.astype("Int64")
+    df["month"]       = df["timestamp"].dt.month
     df["day_of_week"] = df["timestamp"].dt.dayofweek
+
+    # Saturday / Sunday stay separate — Sunday consumption is typically even
+    # lower than Saturday, collapsing them would hide signal.
     df["day_type"] = df["day_of_week"].map({
-        0: "Weekday",
-        1: "Weekday",
-        2: "Weekday",
-        3: "Weekday",
-        4: "Weekday",
-        5: "Saturday",
-        6: "Sunday"
+        0: "Weekday", 1: "Weekday", 2: "Weekday", 3: "Weekday", 4: "Weekday",
+        5: "Saturday", 6: "Sunday",
     })
 
     df["season"] = df["month"].map({
-        12: "Winter", 1: "Winter",  2: "Winter",
-         3: "Spring", 4: "Spring",  5: "Spring",
-         6: "Summer", 7: "Summer",  8: "Summer",
-         9: "Autumn", 10: "Autumn", 11: "Autumn"
+        12: "Winter",  1: "Winter",  2: "Winter",
+         3: "Spring",  4: "Spring",  5: "Spring",
+         6: "Summer",  7: "Summer",  8: "Summer",
+         9: "Autumn", 10: "Autumn", 11: "Autumn",
     })
-
     return df
 
 
 def add_temperature_bucket(df: pd.DataFrame) -> pd.DataFrame:
+    """Discretise temperature into five buckets used as a slicer in Power BI."""
     df = df.copy()
-
     if "temperature_2m" not in df.columns:
-        raise ValueError("Spalte 'temperature_2m' fehlt.")
-
+        raise ValueError("Column 'temperature_2m' is missing.")
     df["temperature_bucket"] = pd.cut(
         df["temperature_2m"],
         bins=[-999, 0, 10, 20, 30, 999],
-        labels=["very_cold", "cold", "mild", "warm", "hot"]
+        labels=["very_cold", "cold", "mild", "warm", "hot"],
     )
-
     return df
 
 
-# ------------------------------------------------------------
-# 3) Daten laden und vorbereiten
-# ------------------------------------------------------------
+# --- Load and prepare --------------------------------------------------------
 
-print_section("DATEI LADEN")
+if not INPUT_FILE.exists():
+    raise FileNotFoundError(f"File not found: {INPUT_FILE}")
 
-if not input_file.exists():
-    raise FileNotFoundError(f"Datei nicht gefunden: {input_file}")
+print("Loading feature dataset ...")
+df = read_csv_robust(INPUT_FILE)
+print(f"  Shape: {df.shape}")
 
-df = read_csv_robust(input_file)
-print(f"Datei geladen: {input_file}")
-print(f"Shape: {df.shape[0]} Zeilen, {df.shape[1]} Spalten")
-
-print_section("DATEN AUFBEREITEN")
-
-df = convert_decimal_columns(df, numeric_columns)
+df = convert_decimal_columns(df, NUMERIC_COLUMNS)
 df = add_time_features(df)
 df = add_temperature_bucket(df)
-
-target_col = find_target_column(df, target_candidates)
-
-print("Datenaufbereitung abgeschlossen.")
+target_col = find_target_column(df, TARGET_CANDIDATES)
 
 
-# ------------------------------------------------------------
-# 4) Modell-Datensatz vorbereiten
-# ------------------------------------------------------------
+# --- Build model dataset -----------------------------------------------------
 
-print_section("MODELL-DATENSATZ")
+required_cols = SCENARIO_FEATURES + [target_col]
+missing = [c for c in required_cols if c not in df.columns]
+if missing:
+    raise ValueError(f"Missing columns required for modelling: {missing}")
 
-required_cols = scenario_features + [target_col]
-missing_required = [col for col in required_cols if col not in df.columns]
+model_df = df[required_cols].copy().dropna(subset=[target_col])
 
-if missing_required:
-    raise ValueError(f"Fehlende Spalten für Modellierung: {missing_required}")
-
-model_df = df[required_cols].copy()
-model_df = model_df.dropna(subset=[target_col])
-
-# hour as string so the RF treats it as a categorical feature (realistic day profiles)
+# `hour` as a string so the pipeline one-hot-encodes it. The RF could in
+# principle handle it as an integer, but keeping it categorical guarantees
+# identical scenario combinations across LR and RF variants.
 model_df["hour"] = model_df["hour"].astype("string")
 
-print(f"Shape Modell-Datensatz: {model_df.shape[0]} Zeilen, {model_df.shape[1]} Spalten")
 
+# --- Train / test split ------------------------------------------------------
 
-# ------------------------------------------------------------
-# 5) Train/Test-Split
-# ------------------------------------------------------------
-
-print_section("TRAIN / TEST SPLIT")
-
-X = model_df[scenario_features]
+X = model_df[SCENARIO_FEATURES]
 y = model_df[target_col]
 
 X_train, X_test, y_train, y_test = train_test_split(
-    X,
-    y,
-    test_size=0.2,
-    random_state=42
+    X, y, test_size=0.2, random_state=42
 )
 
-print(f"Train Shape: {X_train.shape}")
-print(f"Test Shape:  {X_test.shape}")
 
+# --- Train model -------------------------------------------------------------
+# Same preprocessing as the LR variant; only the estimator is different.
+# Hyperparameters match Model D in analyse_regression_extended.py:
+#   n_estimators=200 / max_depth=12 / min_samples_leaf=5
+# These values balance accuracy and training time on ~670k hourly rows and
+# control overfitting.
 
-# ------------------------------------------------------------
-# 6) Modell trainieren – Random Forest (analog zu Modell D)
-#
-#    Replaces the previous LinearRegression model.
-#    Hyperparameters are aligned with analyse_regression_extended.py
-#    (Model D: RF + Canton, no lag features) for consistency.
-#    n_estimators=200 / max_depth=12 / min_samples_leaf=5 balance
-#    accuracy and training time on ~670k hourly rows.
-# ------------------------------------------------------------
-
-print_section("MODELL TRAINIEREN (Random Forest)")
-
-categorical_transformer = Pipeline(steps=[
+categorical_transformer = Pipeline([
     ("imputer", SimpleImputer(strategy="most_frequent")),
-    ("onehot",  OneHotEncoder(drop="first", handle_unknown="ignore"))
+    ("onehot",  OneHotEncoder(drop="first", handle_unknown="ignore")),
 ])
 
-preprocessor = ColumnTransformer(
-    transformers=[
-        ("cat", categorical_transformer, scenario_features)
-    ]
-)
+preprocessor = ColumnTransformer([
+    ("cat", categorical_transformer, SCENARIO_FEATURES),
+])
 
-model = Pipeline(steps=[
+model = Pipeline([
     ("preprocessor", preprocessor),
     ("regressor", RandomForestRegressor(
         n_estimators=200,
         max_depth=12,
         min_samples_leaf=5,
         random_state=42,
-        n_jobs=-1          # use all available CPU cores
-    ))
+        n_jobs=-1,  # use all available CPU cores
+    )),
 ])
 
+print("Training random forest ...")
 model.fit(X_train, y_train)
 
-print("Modelltraining abgeschlossen.")
 
-
-# ------------------------------------------------------------
-# 7) Modell evaluieren
-# ------------------------------------------------------------
-
-print_section("MODELL EVALUATION")
+# --- Evaluate ---------------------------------------------------------------
 
 y_pred = model.predict(X_test)
-
 mae  = mean_absolute_error(y_test, y_pred)
 rmse = np.sqrt(mean_squared_error(y_test, y_pred))
 r2   = r2_score(y_test, y_pred)
-
-print(f"MAE :  {mae:.3f}")
-print(f"RMSE:  {rmse:.3f}")
-print(f"R²  :  {r2:.4f}")
+print(f"  MAE={mae:.2f}  RMSE={rmse:.2f}  R²={r2:.4f}")
 
 
-# ------------------------------------------------------------
-# 8) Beispiel-Predictions
-# ------------------------------------------------------------
-
-print_section("BEISPIEL-PREDICTIONS")
-
-example_scenarios = pd.DataFrame([
-    {
-        "canton":             "ZH_SH",
-        "season":             "Winter",
-        "day_type":           "Weekday",
-        "hour":               "8",
-        "temperature_bucket": "very_cold"
-    },
-    {
-        "canton":             "ZH_SH",
-        "season":             "Summer",
-        "day_type":           "Sunday",
-        "hour":               "15",
-        "temperature_bucket": "warm"
-    },
-    {
-        "canton":             "TI",
-        "season":             "Winter",
-        "day_type":           "Weekday",
-        "hour":               "18",
-        "temperature_bucket": "cold"
-    }
-])
-
-example_scenarios["predicted_consumption_mwh"] = model.predict(example_scenarios)
-print(example_scenarios.to_string(index=False))
-
-
-# ------------------------------------------------------------
-# 9) Szenario-Kombinationen erzeugen
-# ------------------------------------------------------------
-
-print_section("SZENARIO-KOMBINATIONEN ERZEUGEN")
+# --- Generate scenario grid and predict -------------------------------------
 
 canton_values      = sorted(df["canton"].dropna().unique().tolist())
 season_values      = ["Winter", "Spring", "Summer", "Autumn"]
@@ -323,47 +219,16 @@ hour_values        = [str(h) for h in range(24)]
 temperature_values = ["very_cold", "cold", "mild", "warm", "hot"]
 
 scenario_predictions = pd.MultiIndex.from_product(
-    [
-        canton_values,
-        season_values,
-        day_type_values,
-        hour_values,
-        temperature_values
-    ],
-    names=[
-        "canton",
-        "season",
-        "day_type",
-        "hour",
-        "temperature_bucket"
-    ]
+    [canton_values, season_values, day_type_values, hour_values, temperature_values],
+    names=SCENARIO_FEATURES,
 ).to_frame(index=False)
 
-print(f"Anzahl Szenarien: {len(scenario_predictions)}")
-
-
-# ------------------------------------------------------------
-# 10) Predictions für Szenario-Tabelle berechnen
-# ------------------------------------------------------------
-
-print_section("SZENARIO-PREDICTIONS BERECHNEN")
+print(f"Scenario combinations: {len(scenario_predictions):,}")
 
 scenario_predictions["predicted_consumption_mwh"] = model.predict(scenario_predictions)
 
-print("Beispiel der Szenario-Tabelle:")
-print(scenario_predictions.head(10).to_string(index=False))
 
+# --- Export -----------------------------------------------------------------
 
-# ------------------------------------------------------------
-# 11) Szenario-Tabelle speichern
-# ------------------------------------------------------------
-
-print_section("OUTPUT SPEICHERN")
-
-scenario_predictions.to_csv(
-    output_file,
-    sep=";",
-    index=False,
-    decimal=","
-)
-print(f"Szenario-Datei gespeichert unter: {output_file}")
+scenario_predictions.to_csv(OUTPUT_FILE, sep=";", index=False, decimal=",")
+print(f"Saved: {OUTPUT_FILE}")
